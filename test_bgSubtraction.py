@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 
 # 191334-vv-1, 190645-vv-1
 # cap = cv2.VideoCapture('../../data/191334-vv-1.avi')
-# cap = cv2.VideoCapture('../../data/192.168.31.138_01_20160706191100879.mp4')
-cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/190645-vv-1.avi')
+cap = cv2.VideoCapture('../../data/192.168.31.138_01_20160706191100879.mp4')
 
 ret, frame = cap.read()
 
@@ -114,10 +113,11 @@ while(cap.isOpened()):
                 for aa in range(len(annos)):
                     annos[aa].remove()  
                 annos = []
-            fig.canvas.draw()
-            annos.append(plt.annotate('upward = '+str(np.sum(np.array(directionList)==2)), xy=(0.06*output_width,0.9*output_height), color='#ee8d18'))
-            annos.append(plt.annotate('downward = '+str(np.sum(np.array(directionList)==1)), xy=(0.06*output_width,0.95*output_height),color='#ee8d18'))
-            fig.canvas.draw()
+            if Visualize:
+                fig.canvas.draw()
+                annos.append(plt.annotate('upward = '+str(np.sum(np.array(directionList)==2)), xy=(0.06*output_width,0.9*output_height), color='#ee8d18'))
+                annos.append(plt.annotate('downward = '+str(np.sum(np.array(directionList)==1)), xy=(0.06*output_width,0.95*output_height),color='#ee8d18'))
+                fig.canvas.draw()
             end = time.clock()
             print('detection time: {}'.format(end - start))
 
