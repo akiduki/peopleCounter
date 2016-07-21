@@ -1,9 +1,9 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
 import cv2
 import time
-# import SimpleCV
 import pdb
-import matplotlib.pyplot as plt
 
 plt.ion()
 """input data"""
@@ -19,6 +19,20 @@ ret, frame = cap.read()
 # imgLstBuf = np.zeros((1, bufSize))
 
 colors = np.array([[0, 1, 0],[0, 0, 1],[1, 0, 0],[1,1,0],[1,0,1]])
+
+def bigblobKmeans(frame, fgmask, n_clusters):
+    colorlist = [np.array([0,255,255]),np.array([255,0,255]),np.array([255,255,0]),np.array([0,0,255]),np.array([255,0,0]),np.array([0,255,0])]
+    temp_X = np.where(fgmask!=0)
+    X = np.vstack((temp_X[0],temp_X[1])).T
+    y_predict = KMeans(n_clusters).fit_predict(X)
+
+    cluster_img = np.zeros(frame.shape)
+
+    for item in range(X.shape[0]):
+        cluster_img[X[item,0],X[item,1],:] = colorlist[y_predict[item]]
+    pdb.set_trace()
+    return cluster_img, y_predict
+
 
 def getFrame(frameInd):
     ret, frame = cap.read()
@@ -115,6 +129,10 @@ if Visualize:
 
 dist = {}
 listInd = 0
+
+radiusList = []
+contourAreaList = []
+
 while(cap.isOpened()):
     frameInd+=1
     # print frameInd
@@ -129,6 +147,13 @@ while(cap.isOpened()):
 
     contours, hierarchy = cv2.findContours(fgmask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     center = None
+
+    """delete acient lists"""
+    if len(centerList)>0:
+        for jj in centerList.keys():
+            if np.abs(centerList[jj][-1][2]-frameInd)>10:
+                del centerList[jj]
+                del dist[jj]
 
     """reference grid"""
     # lowerH, upperH = output_height/4, 3*output_height/4
@@ -145,9 +170,13 @@ while(cap.isOpened()):
         # cntCount+=1
         # print 'cnt', cntCount
         ((x, y), radius) = cv2.minEnclosingCircle(cnt)
+        # print 'radius ',radius
+        radiusList.append(radius)
+        contourAreaList.append(cv2.contourArea(cnt))
         # ellipse = cv2.fitEllipse(cnt)
         M = cv2.moments(cnt)
-        center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+        ## (x,y,time)
+        center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]), frameInd)
         """save center locations"""
         """put center to the nearest list"""
         if len(centerList)==0:
@@ -160,12 +189,11 @@ while(cap.isOpened()):
                 dist[cc] = []
                 dist[cc] = np.sqrt((center[0]-centerList[cc][-1][0])**2+(center[1]-centerList[cc][-1][1])**2)
             smallestDist = np.min(dist.values())
-            temp = dist.keys()
-            nearestCenterInd = temp[np.where(dist.values()==smallestDist)[0][0]]
+            nearestCenterInd = dist.keys()[np.where(dist.values()==smallestDist)[0][0]]
             if smallestDist>output_height/5:
                 """far away from all existing lists"""
                 listInd +=1
-                print "new list?"
+                print "new list bc too far away"
                 centerList[listInd] = []
                 centerList[listInd].append(center)    
             else:
@@ -184,11 +212,10 @@ while(cap.isOpened()):
                 line_exist = 0
             plt.show()
 
-            # if radius > 50:
             cv2.circle(frame, (int(x), int(y)), int(radius), (0, 255, 255), 2)
             # cv2.ellipse(frame,ellipse,(0,255,255),2)
             
-            cv2.circle(frame, center, 5, (0, 0, 255), -1)
+            cv2.circle(frame, center[:-1], 5, (0, 0, 255), -1)
             # if (Cx_old!=0) and (Cy_old!=0):
             #     cv2.line(frame, center, (Cx_old,Cy_old), (0, 255, 0), 1)
             # (Cx_old,Cy_old) = center
@@ -197,26 +224,33 @@ while(cap.isOpened()):
                 for cc in centerList.keys():
                     lines.append(axL.plot(np.array(centerList[cc])[:,0],np.array(centerList[cc])[:,1],'-o',color = np.array(colors[np.mod(cc,5)]), linewidth=1))
                 line_exist = 1
-                # dots.append(axL.scatter(np.array(centerList)[:,0],np.array(centerList)[:,1]))
+                fig.canvas.draw()
             
-    
+    temp = peopleCount
     if len(centerList)>0:
         peopleCount, directionList, dist, centerList= fitCenters(centerList, dist, peopleCount)
 
     if Visualize:
-        if len(annos)>0:
-            for aa in range(len(annos)):
-                annos[aa].remove()  
-            annos = []
-            fig.canvas.draw()
-        if len(directionList)>0:
-            annos.append(plt.annotate('upward = '+str(np.sum(np.array(directionList)==2)), xy=(0.06*output_width,0.9*output_height), color='#ee8d18'))
-            annos.append(plt.annotate('downward = '+str(np.sum(np.array(directionList)==1)), xy=(0.06*output_width,0.95*output_height),color='#ee8d18'))
-            fig.canvas.draw()
+        if temp!=peopleCount:
+            if len(annos)>0:
+                for aa in range(len(annos)):
+                    annos[aa].remove()  
+                annos = []
+                fig.canvas.draw()
+            if len(directionList)>0:
+                annos.append(plt.annotate('upward = '+str(np.sum(np.array(directionList)==2)), xy=(0.06*output_width,0.9*output_height), color='#ee8d18'))
+                annos.append(plt.annotate('downward = '+str(np.sum(np.array(directionList)==1)), xy=(0.06*output_width,0.95*output_height),color='#ee8d18'))
+                fig.canvas.draw()
 
 
-    # # fname = '../frames/'+str(frameInd).zfill(6)+'.jpg'
-    # # plt.savefig(fname)
+        # fname = '../frames/'+str(frameInd).zfill(6)+'_frm'+'.jpg'
+        # plt.savefig(fname)
+        # # cv2.imwrite(fname,fgmask)
+
+
+    if radius > 160:
+        n_clusters = np.int(radius/160.0)
+        cluster_img, y_predict = bigblobKmeans(frame, fgmask, n_clusters)
 
 
 
@@ -235,6 +269,12 @@ while(cap.isOpened()):
     k = cv2.waitKey(10) & 0xff
     if k == 27:
         break
+    end = time.clock()
+    print 'time:', (end - start)
+
+
+
+
 
 cap.release()
 video.release()
