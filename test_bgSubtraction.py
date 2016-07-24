@@ -18,12 +18,18 @@ def bigblobKmeans(frame, fgmask, n_clusters):
 
     for ii in range(X.shape[0]):
         cluster_img[X[ii,0],X[ii,1],:] = colorlist[y_predict[ii]]
-    cv2.imshow('',cluster_img)
-    pdb.set_trace()
+    # cv2.imshow('',cluster_img)
     for cls in range(n_clusters):
         centroidList.append( (np.mean( (X[:,1])[y_predict==cls]), np.mean( (X[:,0])[y_predict==cls])) )
 
     return centroidList
+
+
+def readBuffer(startOffset):
+    for ii in range(startOffset):
+        ret, frame = cap.read()
+    return cap
+
 
 
 def getFrame(frameInd):
@@ -75,7 +81,7 @@ def fitCenters(centerList,dist, peopleCount):
 
     for cc in centerList.keys():
         """estimate peopel count"""
-        if (np.min(np.array(centerList[cc])[:,1])< lowerH) and (np.max(np.array(centerList[cc])[:,1])>upperH):
+        if (np.min(np.array(centerList[cc])[:,1])<= lowerH) and (np.max(np.array(centerList[cc])[:,1])>=upperH):
             peopleCount+=1
             print "peopleCount",peopleCount
             """estimate direction"""
@@ -83,9 +89,9 @@ def fitCenters(centerList,dist, peopleCount):
                 peopleDirection = 1 ## downward
             elif ((np.array(centerList[cc])[:,1][1:]-np.array(centerList[cc])[:,1][:-1])<=0).sum()/float(len(centerList[cc]))>=0.70:
                 peopleDirection = 2 # upward
-            elif np.array(centerList[cc])[:,1][-1]< lowerH and np.array(centerList[cc])[:,1][0]>upperH:
+            elif np.mean(np.array(centerList[cc])[:,1][-3:])< lowerH and np.mean(np.array(centerList[cc])[:,1][:3])>upperH:
                 peopleDirection = 2 # upward
-            elif np.array(centerList[cc])[:,1][0]< lowerH and np.array(centerList[cc])[:,1][-1]>upperH:
+            elif np.mean(np.array(centerList[cc])[:,1][:3])< lowerH and np.mean(np.array(centerList[cc])[:,1][-3:])>upperH:
                 peopleDirection = 1 # downward
             else:
                 peopleDirection = 3 # odd cases
@@ -138,6 +144,9 @@ if __name__ == '__main__':
     # 191334-vv-1, 190645-vv-1
     # cap = cv2.VideoCapture('../../data/191334-vv-1.avi')
     cap = cv2.VideoCapture('../../data/192.168.31.138_01_20160706191100879.mp4')
+    # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-21/3-2.8mm/192.168.1.147_01_20160721171223357.mp4')
+    # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-21/3-4mm/192.168.1.145_01_20160721164044307.mp4')
+    # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
     # cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/190645-vv-1.avi')
 
     ret, frame = cap.read()
@@ -161,7 +170,7 @@ if __name__ == '__main__':
     output_width  = int(frame.shape[1] * scale)
     output_height = int(frame.shape[0] * scale)
     CODE_TYPE = cv2.cv.CV_FOURCC('m','p','4','v')
-    video = cv2.VideoWriter('output_detection2.avi',CODE_TYPE,6,(output_width,output_height),1)
+    # video = cv2.VideoWriter('output_detection2.avi',CODE_TYPE,6,(output_width,output_height),1)
 
     (Cx_old,Cy_old) = (0,0)
 
@@ -172,7 +181,11 @@ if __name__ == '__main__':
     lines = []
     annos = []
     directionList = []
-    frameInd = 0
+    startOffset = 377
+    frameInd = 0+startOffset
+    cap = readBuffer(startOffset)
+
+
     Visualize = True
 
     if Visualize:
@@ -197,7 +210,7 @@ if __name__ == '__main__':
         fgmask = fgbg.apply(frame)
         ret, fgmask = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY) # THRESH_BINARY, THRESH_TOZERO
         fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
-
+        cv2.imshow('fgmask',fgmask)
         contours, hierarchy = cv2.findContours(fgmask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         center = None
 
@@ -210,7 +223,9 @@ if __name__ == '__main__':
 
         """reference grid"""
         # lowerH, upperH = output_height/4, 3*output_height/4
-        lowerH, upperH = 2*output_height/5, 3*output_height/5
+        # lowerH, upperH = 2*output_height/5, 3*output_height/5
+        lowerH, upperH = 9*output_height/20, 11*output_height/20
+
         if Visualize:
             cv2.line(frame, (0,lowerH), (output_width,lowerH), (255, 0, 255),1)
             cv2.line(frame, (0,output_height/2), (output_width,output_height/2), (255, 0, 255),1)
@@ -223,7 +238,7 @@ if __name__ == '__main__':
             # cntCount+=1
             # print 'cnt', cntCount
             ((x, y), radius) = cv2.minEnclosingCircle(cnt)
-            # print 'radius ',radius
+
             radiusList.append(radius)
             contourAreaList.append(cv2.contourArea(cnt))
             
@@ -237,13 +252,11 @@ if __name__ == '__main__':
                     centerList, dist = saveCenter(center, centerList, dist)
 
             else: # single blob
-
                 # ellipse = cv2.fitEllipse(cnt)
                 M = cv2.moments(cnt)
                 ## (x,y,time)
                 center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]), frameInd)
                 centerList, dist = saveCenter(center, centerList, dist)
-
 
             if Visualize:
                 try:
@@ -267,10 +280,14 @@ if __name__ == '__main__':
                 im.set_data(frame[:,:,::-1])
                 if len(centerList)>0:
                     for cc in centerList.keys():
+                        # if np.min(np.array(centerList[cc])[:,1])>lowerH or np.max(np.array(centerList[cc])[:,1])<upperH:
+                        #     continue #don't draw the points outside of detection region
+                        # else:
+                        #     lines.append(axL.plot(np.array(centerList[cc])[:,0],np.array(centerList[cc])[:,1],'-o',color = np.array(colors[np.mod(cc,5)]), linewidth=1))
+                    
                         lines.append(axL.plot(np.array(centerList[cc])[:,0],np.array(centerList[cc])[:,1],'-o',color = np.array(colors[np.mod(cc,5)]), linewidth=1))
                     line_exist = 1
                     fig.canvas.draw()
-                
 
         temp = peopleCount
         if len(centerList)>0:
@@ -281,18 +298,22 @@ if __name__ == '__main__':
             fig.canvas.draw()
             if temp!=peopleCount:
                 if len(annos)>0:
-                    for aa in range(len(annos)):
+                    for aa in range(len(annos)):    
                         annos[aa].remove()  
                     annos = []
                     fig.canvas.draw()
                 if len(directionList)>0:
-                    annos.append(plt.annotate('upward = '+str(np.sum(np.array(directionList)==2)), xy=(0.06*output_width,0.9*output_height), color='#ee8d18'))
-                    annos.append(plt.annotate('downward = '+str(np.sum(np.array(directionList)==1)), xy=(0.06*output_width,0.95*output_height),color='#ee8d18'))
+                    annos.append(plt.annotate('upward = '+str(np.sum(np.array(directionList)==2)), xy=(0.06*output_width,0.8*output_height), color='#ee8d18'))
+                    annos.append(plt.annotate('downward = '+str(np.sum(np.array(directionList)==1)), xy=(0.06*output_width,0.85*output_height),color='#ee8d18'))
+                    annos.append(plt.annotate('others = '+str(np.sum(np.array(directionList)==3)), xy=(0.06*output_width,0.9*output_height),color='red'))
+                    annos.append(plt.annotate('total = '+str(peopleCount), xy=(0.06*output_width,0.95*output_height),color='#ee8d18'))
+
                     fig.canvas.draw()
 
 
-            # fname = '../frames/'+str(frameInd).zfill(6)+'_frm'+'.jpg'
-            # plt.savefig(fname)
+            # if frameInd>300:
+            fname = '../frames/'+str(frameInd).zfill(6)+'.jpg'
+            plt.savefig(fname)
             # # cv2.imwrite(fname,fgmask)
 
 
