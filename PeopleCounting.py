@@ -8,14 +8,14 @@ from tracking import Blob
 
 # 191334-vv-1, 190645-vv-1
 # cap = cv2.VideoCapture('191334-vv-1.avi')
-# cap = cv2.VideoCapture('192.168.31.138_01_20160706191100879.avi')
-cap = cv2.VideoCapture('192.168.31.138_01_20160706191100879.avi')
+# cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160706191100879.avi')
+cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
 frameStart = 300;
 cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, frameStart);
 ret, frame = cap.read()
 
 # fgbg = cv2.BackgroundSubtractorMOG2()
-fgbg = cv2.BackgroundSubtractorMOG2(history=10, varThreshold=500)
+fgbg = cv2.BackgroundSubtractorMOG2(history=50, varThreshold=1000)
 
 kernelSize = 10
 kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernelSize,kernelSize))
@@ -26,16 +26,16 @@ scale = 0.5
 output_width  = int(frame.shape[1] * scale)
 output_height = int(frame.shape[0] * scale)
 CODE_TYPE = cv2.cv.CV_FOURCC('m','p','4','v')
-video = cv2.VideoWriter('output_detection.avi',CODE_TYPE,6,(output_width,output_height),1)
+video = cv2.VideoWriter('output_detection.avi',CODE_TYPE,20,(output_width,output_height),1)
 
-areaThreshold = 25 * 25 * 3.14
+areaThreshold = 1000 #20 * 20 * 3.14
 countingHalfMargin = 20
-trackingHalfMargin = 50
+trackingHalfMargin = 20
 countUpperBound = output_height / 2 - countingHalfMargin
 countLowerBound = output_height / 2 + countingHalfMargin
 validTrackUpperBound = output_height / 2 - trackingHalfMargin
 validTrackLowerBound = output_height / 2 + trackingHalfMargin
-distThreshold = 50
+distThreshold = 80
 inactiveThreshold = 10
 tracking = Tracking(countUpperBound, countLowerBound, validTrackUpperBound, validTrackLowerBound)
 tracks = []
@@ -54,12 +54,14 @@ while(cap.isOpened()):
 
     # resize image, background subtraction and post-processing of blob
     frame = cv2.resize(frame, (output_width, output_height), interpolation = cv2.INTER_CUBIC)
-    fgmask = fgbg.apply(frame)
+    fgmask = fgbg.apply(frame, 0.00001)
     ret, fgmask = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY) # THRESH_BINARY, THRESH_TOZERO
+    fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_CLOSE, kernel)
     fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
 
     # find blobs
     contours, hierarchy = cv2.findContours(fgmask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+    frame = fgmask
     center = None
     blobs = []
     for cnt in contours:
@@ -102,9 +104,9 @@ while(cap.isOpened()):
     print('fps: {}'.format(1 / (end - start)))
 
     cv2.imshow('frame',frame)
-    video.write(frame)
+    # video.write(frame)
 
-    k = cv2.waitKey(10) & 0xff
+    k = cv2.waitKey(50) & 0xff
     if k == 27:
         break
 

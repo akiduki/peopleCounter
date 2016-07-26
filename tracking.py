@@ -78,7 +78,7 @@ class Tracking(object):
                     minIdxTrack = idxTrack
                     closestTrack = track
             if minDist < distThreshold and trackMark[minIdxTrack] == 0:
-                print minDist
+                # print minDist
                 closestTrack.updateTrack(blob)
                 trackMark[minIdxTrack] = 1
                 blobMark[idxBlob] = 1
