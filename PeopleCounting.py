@@ -1,9 +1,9 @@
 import numpy as np
 import cv2
 import time
+import math
 from tracking import Tracking
 from tracking import Blob
-# import SimpleCV
 
 from ConfigParser import SafeConfigParser
 
@@ -18,10 +18,11 @@ if __name__ == '__main__':
     """input data"""
     # 191334-vv-1, 190645-vv-1
     # cap = cv2.VideoCapture('191334-vv-1.avi')
-    cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
+    # cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
     # cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160706191100879.avi')
     # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
     # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-20/4mm-2.65/192.168.0.100_01_20160720171945536.mp4')
+    cap = cv2.VideoCapture('/Users/yuanyi.xue/Downloads/2016-07-21/3m-4mm/192.168.1.145_01_20160721164209992.mp4')
 
     startOffset = 300;
     cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, startOffset);
@@ -35,26 +36,29 @@ if __name__ == '__main__':
     parser.read(configfile)
     mog2History = parser.getint('PeopleCounting', 'mog2History')
     mog2VarThrsh = parser.getint('PeopleCounting', 'mog2VarThrsh')
+    mog2Shadow = parser.getboolean('PeopleCounting', 'mog2Shadow')
+    mog2LearningRate = parser.getfloat('PeopleCounting', 'mog2LearningRate')
     kernelSize = parser.getint('PeopleCounting', 'kernelSize')
     scale = parser.getfloat('PeopleCounting', 'scale')
-    areaThreshold = parser.getfloat('PeopleCounting', 'areaThreshold')
+    areaThreshold = math.pi * parser.getfloat('PeopleCounting', 'areaRadius')**2
     peopleBlobSize = parser.getint('PeopleCounting', 'peopleBlobSize')
     distThreshold = parser.getint('PeopleCounting', 'distThreshold')
     countingRegion = map(int, parser.get('PeopleCounting', 'countingRegion').split(','))
     trackingRegion = map(int, parser.get('PeopleCounting', 'trackingRegion').split(','))
     inactiveThreshold = parser.getint('PeopleCounting', 'inactiveThreshold')
     singlePersonBlobSize = parser.getint('PeopleCounting', 'singlePersonBlobSize')
-    Visualize = parser.getboolean('PeopleCounting', 'Visualize')
+    Debug = parser.getboolean('PeopleCounting', 'Debug')
+    Visualize = parser.getboolean('PeopleCounting', 'Visualize') or Debug
 
     """ Initialize MOG2, VideoWriter, and tracking """
-    fgbg = cv2.BackgroundSubtractorMOG2(mog2History, mog2VarThrsh)
+    fgbg = cv2.BackgroundSubtractorMOG2(mog2History, mog2VarThrsh, mog2Shadow)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernelSize,kernelSize))
     # detector = cv2.SimpleBlobDetector()
 
     output_width  = int(frame.shape[1] * scale)
     output_height = int(frame.shape[0] * scale)
     CODE_TYPE = cv2.cv.CV_FOURCC('m','p','4','v')
-    video = cv2.VideoWriter('output_detection.avi',CODE_TYPE,6,(output_width,output_height*2),1)
+    video = cv2.VideoWriter('output_detection.avi',CODE_TYPE,30,(output_width,output_height*2),1)
 
     trackingObj = Tracking(countingRegion, trackingRegion, peopleBlobSize)
     tracks = []
@@ -74,7 +78,7 @@ if __name__ == '__main__':
 
         # resize image, background subtraction and post-processing of blob
         frame = cv2.resize(frame, (output_width, output_height), interpolation = cv2.INTER_CUBIC)
-        fgmask = fgbg.apply(frame)
+        fgmask = fgbg.apply(frame, mog2LearningRate)
         ret, fgmask = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY) # THRESH_BINARY, THRESH_TOZERO
         fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_CLOSE, kernel)
         fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
@@ -120,10 +124,14 @@ if __name__ == '__main__':
 
         # Visualize tracking region, counting region and tracks
         if Visualize:
-            cv2.line(frame, (0, validTrackUpperBound), (output_width - 1, validTrackUpperBound), (255, 0, 0), 2)
-            cv2.line(frame, (0, validTrackLowerBound), (output_width - 1, validTrackLowerBound), (255, 0, 0), 2)
-            cv2.line(frame, (0, countUpperBound), (output_width - 1, countUpperBound), (0, 0, 255), 2)
-            cv2.line(frame, (0, countLowerBound), (output_width - 1, countLowerBound), (0, 0, 255), 2)
+            cv2.line(frame, (trackingRegion[1], trackingRegion[0]),
+                     (trackingRegion[1]+trackingRegion[3], trackingRegion[0]), (255, 0, 0), 2)
+            cv2.line(frame, (trackingRegion[1], trackingRegion[0]+trackingRegion[2]),
+                     (trackingRegion[1]+trackingRegion[3], trackingRegion[0]+trackingRegion[2]), (255, 0, 0), 2)
+            cv2.line(frame, (countingRegion[1], countingRegion[0]),
+                     (countingRegion[1]+countingRegion[3], countingRegion[0]), (0, 0, 255), 2)
+            cv2.line(frame, (countingRegion[1], countingRegion[0]+countingRegion[2]),
+                     (countingRegion[1]+countingRegion[3], countingRegion[0]+countingRegion[2]), (0, 0, 255), 2)
             cv2.putText(frame, '# UP %s' % totalUp, (5, output_height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
             cv2.putText(frame, '# DOWN %s' % totalDown, (5, output_height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
             for idxTrack, track in enumerate(tracks):

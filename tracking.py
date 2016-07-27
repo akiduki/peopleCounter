@@ -20,7 +20,7 @@ class Track(object):
         self.centerList = []
         self.lifetime = 0
         self.inactiveCount = 0  #frame number staying inactive
-        self.activeCount = 0  
+        self.activeCount = 0 
         self.direction = direction  ##the blob's location
         self.generalDirection = None
         self.counted = False
@@ -165,8 +165,11 @@ class Tracking(object):
 
     def appearRegion(self, blob):
         """return non-zero values if within the detection region"""
-        if (blob.center[1] < self.validTrackUpperBound or blob.center[1] > self.validTrackLowerBound) and \
-           (blob.center[0] < self.validTrackLeftBound or blob.center[0] > self.validTrackRightBound) :
+        if blob.center[1] < self.validTrackUpperBound and \
+           blob.center[0] > self.validTrackLeftBound and blob.center[0] < self.validTrackRightBound:
+            return -1
+        elif blob.center[1] > self.validTrackLowerBound and \
+           blob.center[0] > self.validTrackLeftBound and blob.center[0] < self.validTrackRightBound:
             return 1
         else:
             return 0
