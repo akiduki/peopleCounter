@@ -148,13 +148,11 @@ class Tracking(object):
             else:
                 if track.direction == -1 and track.centerList[-1][1] > self.countLowerBound:
                     # nDown += max(1, int((track.maxx - track.minx) / self.peopleBlobSize + 0.5))
-                    print track.maxblobspan
                     nDown = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
                     track.direction = 1
                     # track.counted = True
                 elif track.direction == 1 and track.centerList[-1][1] < self.countUpperBound:
                     # nUp += max(1, int((track.maxx - track.minx) / self.peopleBlobSize + 0.5))
-                    print track.maxblobspan
                     nUp = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
                     track.direction = -1
                     # track.counted = True
