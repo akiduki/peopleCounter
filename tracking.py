@@ -66,14 +66,17 @@ class Track(object):
         self.counted = True
 
 class Tracking(object):
-    def __init__(self, countUpperBound, countLowerBound, validTrackUpperBound, validTrackLowerBound, peopleBlobSize):
-        self.countUpperBound = countUpperBound
-        self.countLowerBound = countLowerBound
-        self.validTrackUpperBound = validTrackUpperBound
-        self.validTrackLowerBound = validTrackLowerBound
+    def __init__(self, countingRegion, trackingRegion, peopleBlobSize):
+        self.countUpperBound = countingRegion[0]
+        self.countLowerBound = countingRegion[0] + countingRegion[2]
+        self.countLeftBound = countingRegion[1]
+        self.countRightBound = countingRegion[1] + countingRegion[3]
+        self.validTrackUpperBound = trackingRegion[0]
+        self.validTrackLowerBound = trackingRegion[0] + trackingRegion[2]
+        self.validTrackLeftBound = trackingRegion[1]
+        self.validTrackRightBound = trackingRegion[1] + trackingRegion[3]
         self.peopleBlobSize = peopleBlobSize
         self.counter = 0
-
 
     """updateAllTracks"""
     def updateTrack(self, blobs, tracks, distThreshold, inactiveThreshold):
@@ -162,9 +165,8 @@ class Tracking(object):
 
     def appearRegion(self, blob):
         """return non-zero values if within the detection region"""
-        if blob.center[1] < self.validTrackUpperBound:
-            return -1
-        elif blob.center[1] > self.validTrackLowerBound:
+        if (blob.center[1] < self.validTrackUpperBound or blob.center[1] > self.validTrackLowerBound) and \
+           (blob.center[0] < self.validTrackLeftBound or blob.center[0] > self.validTrackRightBound) :
             return 1
         else:
             return 0

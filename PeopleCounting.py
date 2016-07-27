@@ -5,11 +5,14 @@ from tracking import Tracking
 from tracking import Blob
 # import SimpleCV
 
+from ConfigParser import SafeConfigParser
+
 from utilities import bigblobKmeans
 from utilities import readBuffer, getFrame
 # from utilities import mergeCenterList
 import pdb
 
+configfile = './parameters.ini'
 
 if __name__ == '__main__':
     """input data"""
@@ -22,44 +25,42 @@ if __name__ == '__main__':
 
     startOffset = 300;
     cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, startOffset);
-    
+
     # startOffset = 300
     # cap = readBuffer(startOffset, cap)
     ret, frame = cap.read()
 
-    """parameters"""
-    # fgbg = cv2.BackgroundSubtractorMOG2()
-    fgbg = cv2.BackgroundSubtractorMOG2(history=20, varThreshold=1000)
-    # fgbg = cv2.BackgroundSubtractorMOG2(history=10, varThreshold=200)
+    """parameters from parameters.ini"""
+    parser = SafeConfigParser()
+    parser.read(configfile)
+    mog2History = parser.getint('PeopleCounting', 'mog2History')
+    mog2VarThrsh = parser.getint('PeopleCounting', 'mog2VarThrsh')
+    kernelSize = parser.getint('PeopleCounting', 'kernelSize')
+    scale = parser.getfloat('PeopleCounting', 'scale')
+    areaThreshold = parser.getfloat('PeopleCounting', 'areaThreshold')
+    peopleBlobSize = parser.getint('PeopleCounting', 'peopleBlobSize')
+    distThreshold = parser.getint('PeopleCounting', 'distThreshold')
+    countingRegion = map(int, parser.get('PeopleCounting', 'countingRegion').split(','))
+    trackingRegion = map(int, parser.get('PeopleCounting', 'trackingRegion').split(','))
+    inactiveThreshold = parser.getint('PeopleCounting', 'inactiveThreshold')
+    singlePersonBlobSize = parser.getint('PeopleCounting', 'singlePersonBlobSize')
+    Visualize = parser.getboolean('PeopleCounting', 'Visualize')
 
-    kernelSize = 5
+    """ Initialize MOG2, VideoWriter, and tracking """
+    fgbg = cv2.BackgroundSubtractorMOG2(mog2History, mog2VarThrsh)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(kernelSize,kernelSize))
     # detector = cv2.SimpleBlobDetector()
 
-    scale = 0.5
     output_width  = int(frame.shape[1] * scale)
     output_height = int(frame.shape[0] * scale)
     CODE_TYPE = cv2.cv.CV_FOURCC('m','p','4','v')
     video = cv2.VideoWriter('output_detection.avi',CODE_TYPE,6,(output_width,output_height*2),1)
 
-    areaThreshold = 25 * 25 * 3.14
-    countingHalfMargin = 20
-    trackingHalfMargin = 20
-    countUpperBound = output_height / 2 - countingHalfMargin
-    countLowerBound = output_height / 2 + countingHalfMargin
-    validTrackUpperBound = output_height / 2 - trackingHalfMargin
-    validTrackLowerBound = output_height / 2 + trackingHalfMargin
-    peopleBlobSize = 100
-    distThreshold = 80
-    inactiveThreshold = 10
-    trackingObj = Tracking(countUpperBound, countLowerBound, validTrackUpperBound, validTrackLowerBound, peopleBlobSize)
+    trackingObj = Tracking(countingRegion, trackingRegion, peopleBlobSize)
     tracks = []
     totalUp = 0
     totalDown = 0
     frameInd = startOffset
-
-    singlePersonBlobSize = 10000
-    Visualize = True
 
     while(cap.isOpened()):
         start = time.clock()
@@ -83,7 +84,7 @@ if __name__ == '__main__':
         contours, hierarchy = cv2.findContours(fgmask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         center = None
         blobs = []
-        
+
         for cnt in contours:
             if cv2.contourArea(cnt) < areaThreshold:
                 continue
