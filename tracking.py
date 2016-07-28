@@ -6,6 +6,17 @@ import pdb
 
 colors = [(0,255,0), (255,0,0), (0,0,255), (0,255,255), (255,0,255), (255,255,0), (0,128,128), (128,0,128), (128,128,0)]
 
+class RectRegion(object):
+    def __init__(self, regionBounds):
+        self.left   = regionBounds[0]
+        self.right  = regionBounds[1]
+        self.top    = regionBounds[2]
+        self.bottom = regionBounds[3]
+
+    def contains(self, point):
+        return self.left < point[0] < self.right and self.top < point[1] < self.bottom
+
+
 class Blob(object):
     def __init__(self, center, minx, maxx, miny, maxy):
         self.center = center
@@ -71,15 +82,10 @@ class Track(object):
         self.counted = True
 
 class Tracking(object):
-    def __init__(self, countingRegion, trackingRegion, peopleBlobSize):
-        self.countUpperBound = countingRegion[0]
-        self.countLowerBound = countingRegion[0] + countingRegion[2]
-        self.countLeftBound = countingRegion[1]
-        self.countRightBound = countingRegion[1] + countingRegion[3]
-        self.validTrackUpperBound = trackingRegion[0]
-        self.validTrackLowerBound = trackingRegion[0] + trackingRegion[2]
-        self.validTrackLeftBound = trackingRegion[1]
-        self.validTrackRightBound = trackingRegion[1] + trackingRegion[3]
+    def __init__(self, countingRegion, upperTrackingRegion, lowerTrackingRegion, peopleBlobSize):
+        self.countingRegion = RectRegion(countingRegion)
+        self.upperTrackingRegion = RectRegion(upperTrackingRegion)
+        self.lowerTrackingRegion = RectRegion(lowerTrackingRegion)
         self.peopleBlobSize = peopleBlobSize
         self.counter = 0
 
@@ -146,12 +152,12 @@ class Tracking(object):
                     trackMark[idxTrack] = 2
             # if track has passed detection region, increment up/down counter, then inactivate track
             else:
-                if track.direction == -1 and track.centerList[-1][1] > self.countLowerBound:
-                    if self.countLeftBound < track.centerList[-1][0] < self.countRightBound:
+                if track.direction == -1 and track.centerList[-1][1] > self.countingRegion.bottom:
+                    if self.countingRegion.left < track.centerList[-1][0] < self.countingRegion.right:
                         nDown = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
                     track.direction = 1
-                elif track.direction == 1 and track.centerList[-1][1] < self.countUpperBound:
-                    if self.countLeftBound < track.centerList[-1][0] < self.countRightBound:
+                elif track.direction == 1 and track.centerList[-1][1] < self.countingRegion.top:
+                    if self.countingRegion.left < track.centerList[-1][0] < self.countingRegion.right:
                         nUp = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
                     track.direction = -1
             # elif not track.counted:
@@ -170,24 +176,17 @@ class Tracking(object):
     def distBlobTrack(self, blob, track):
         predictCenter = track.predictCenter()
         dist = np.linalg.norm(np.array(blob.center) - np.array(predictCenter))
-        # print blob.center, predictCenter, dist
         return dist
 
     def checkBlobRegion(self, blob):
         """check whether a blob center is within the detect region"""
-        if blob.center[0] > self.validTrackLeftBound and blob.center[0] < self.validTrackRightBound and \
-           blob.center[1] > self.validTrackUpperBound and blob.center[1] < self.validTrackLowerBound :
-            return True
-        else:
-            return False
+        return self.countingRegion.contains(blob.center)
 
     def appearRegion(self, blob):
-        """determine the blob appearance region, -1 for upper region, 1 for lower region, 0 for center region"""
-        if blob.center[1] < self.validTrackUpperBound and \
-           blob.center[0] > self.validTrackLeftBound and blob.center[0] < self.validTrackRightBound:
+        """determine the blob appearance region, -1 for upper region, 1 for lower region, 0 for other regions"""
+        if self.upperTrackingRegion.contains(blob.center):
             return -1
-        elif blob.center[1] > self.validTrackLowerBound and \
-           blob.center[0] > self.validTrackLeftBound and blob.center[0] < self.validTrackRightBound:
+        elif self.lowerTrackingRegion.contains(blob.center):
             return 1
         else:
             return 0
