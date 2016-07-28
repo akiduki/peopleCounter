@@ -147,15 +147,13 @@ class Tracking(object):
             # if track has passed detection region, increment up/down counter, then inactivate track
             else:
                 if track.direction == -1 and track.centerList[-1][1] > self.countLowerBound:
-                    # nDown += max(1, int((track.maxx - track.minx) / self.peopleBlobSize + 0.5))
-                    nDown = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
+                    if self.countLeftBound < track.centerList[-1][0] < self.countRightBound:
+                        nDown = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
                     track.direction = 1
-                    # track.counted = True
                 elif track.direction == 1 and track.centerList[-1][1] < self.countUpperBound:
-                    # nUp += max(1, int((track.maxx - track.minx) / self.peopleBlobSize + 0.5))
-                    nUp = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
+                    if self.countLeftBound < track.centerList[-1][0] < self.countRightBound:
+                        nUp = max(1, int(track.maxblobspan / self.peopleBlobSize + 0.5))
                     track.direction = -1
-                    # track.counted = True
             # elif not track.counted:
             #     if (np.min(np.array(track.centerList)[:,1])<= self.validTrackUpperBound) and (np.max(np.array(track.centerList)[:,1])>=self.validTrackLowerBound):
             #         track.fitTracklet(self.validTrackUpperBound,self.validTrackLowerBound)
@@ -184,7 +182,7 @@ class Tracking(object):
             return False
 
     def appearRegion(self, blob):
-        """return non-zero values if within the detection region"""
+        """determine the blob appearance region, -1 for upper region, 1 for lower region, 0 for center region"""
         if blob.center[1] < self.validTrackUpperBound and \
            blob.center[0] > self.validTrackLeftBound and blob.center[0] < self.validTrackRightBound:
             return -1
