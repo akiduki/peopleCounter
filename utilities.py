@@ -1,10 +1,9 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
 import cv2
 import time
 import pdb
-    
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans 
 
 def bigblobKmeans(frame, fgmask, n_clusters):
     colorlist = [np.array([0,255,255]),np.array([255,0,255]),np.array([255,255,0]),np.array([0,0,255]),np.array([255,0,0]),np.array([0,255,0])]
@@ -12,17 +11,43 @@ def bigblobKmeans(frame, fgmask, n_clusters):
     centroidList = []
     temp_X = np.where(fgmask!=0)
     X = np.vstack((temp_X[0],temp_X[1])).T    
-    y_predict = KMeans(n_clusters = n_clusters).fit_predict(X)
+    y_predict = KMeans(n_clusters = n_clusters,n_init=3,max_iter=150,tol=1).fit_predict(X)
 
-    cluster_img = np.zeros(frame.shape)
-
-    for ii in range(X.shape[0]):
-        cluster_img[X[ii,0],X[ii,1],:] = colorlist[y_predict[ii]]
+    # cluster_img = np.zeros(frame.shape)
+    # for ii in range(X.shape[0]):
+    #     cluster_img[X[ii,0],X[ii,1],:] = colorlist[y_predict[ii]]
     # cv2.imshow('',cluster_img)
+    # cv2.waitKey(0)
     for cls in range(n_clusters):
         centroidList.append( (np.mean( (X[:,1])[y_predict==cls]), np.mean( (X[:,0])[y_predict==cls])) )
 
     return centroidList
+
+
+def getBlobRatio(blobmask, validTrackUpperBound, validTrackLowerBound):
+    """estimate number of people passing just by horizontal foreground pixel ratio"""
+    """get ratio for EACH blob"""    
+    horizRatio = np.dot(np.sum(blobmask[validTrackUpperBound: validTrackLowerBound,:]!=0,1), 1.0/blobmask.shape[1])
+    peak = np.max(horizRatio)
+    if peak > 0.1:
+        peakLoc = np.where(horizRatio==peak)[0]
+        peakLoc = np.mean(peakLoc)
+    else:
+        peakLoc = None
+    return (peak, peakLoc)
+
+
+def smooth(xk, yk):
+    from scipy.interpolate import interp1d
+    f1 = interp1d(xk, yk, kind='linear', axis=-1, copy=True, bounds_error=True, fill_value=np.nan, assume_sorted=False)
+    x_smooth_per_pixel = np.arange(xk.min(), xk.max(),0.5)
+    y_smooth_per_pixel = f1(x_smooth_per_pixel)
+    
+    # x_smooth_same_len = np.linspace(x_smooth_per_pixel.min(), x_smooth_per_pixel.max(),len(xk))
+    # f2 = interp1d(x_smooth_per_pixel, y_smooth_per_pixel, kind='slinear', axis=-1, copy=True, bounds_error=True, fill_value=np.nan, assume_sorted=False)
+    # y_smooth_same_len = f2(x_smooth_same_len)
+    # return x_smooth_same_len, y_smooth_same_len
+    return x_smooth_per_pixel, y_smooth_per_pixel
 
 
 def readBuffer(startOffset, cap):
@@ -51,32 +76,21 @@ def mergeCenterList(centerList):
     return centerList
 
 
+def checkBlobSize(fgmask):
+    """check blob sizes in different videos/regions"""
+    """reference grid"""
+    scale = 0.5
+    output_width  = int(fgmask.shape[1] * scale)
+    output_height = int(fgmask.shape[0] * scale)
 
+    upperH,lowerH  = output_height/4, 3*output_height/4
+    # upperH,lowerH = 2*output_height/5, 3*output_height/5    
+    return (np.sum(fgmask[0:upperH,:]!=0),  np.sum(fgmask[upperH:output_height/2,:]!=0), np.sum(fgmask[output_height/2:lowerH,:]!=0),np.sum(fgmask[lowerH:output_height,:]!=0) )
 
 def fitCenters(centerList,dist, peopleCount):
     """fit a piece-linear line to stored centers"""
     """delete already fitted"""
     upward, downward= 0, 0 
-
-    """polynomial fitting??"""
-    # order = 3
-    # p3 = [] #polynomial coefficients, order 3
-    
-    # centerListX = np.array(centerList)[:,0]
-    # centerListY = np.array(centerList)[:,1]
-    # sortedcenterListY = np.sort(centerListY)
-    # turnInd = np.where(np.abs(centerListY[1:]-centerListY[:-1])>output_height/4)[0]
-    # # turnInd = np.where(np.abs(sortedcenterListY[1:]-sortedcenterListY[:-1])>output_height/4)[0]
-    # pdb.set_trace()
-    # # if len(turnInd)>1:
-    # #     for tt in range(len(turInd)):
-    # #         subCenterList = centerList[0:turnInd[tt]]
-
-    # # for kk in centerList:
-    # #     p3.append(np.polyfit(centerListX, centerListY, order))
-    # plt.figure()
-    # plt.scatter(centerListX,centerListY)
-
     for cc in centerList.keys():
         """estimate peopel count"""
         if (np.min(np.array(centerList[cc])[:,1])<= lowerH) and (np.max(np.array(centerList[cc])[:,1])>=upperH):
@@ -131,5 +145,3 @@ def saveCenter(center, centerList, dist):
             centerList[nearestCenterInd].append(center)
 
     return centerList, dist
-
-

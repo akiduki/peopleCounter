@@ -7,9 +7,8 @@ from tracking import Blob
 
 from ConfigParser import SafeConfigParser
 
-from utilities import bigblobKmeans
+from utilities import bigblobKmeans, getBlobRatio
 from utilities import readBuffer, getFrame
-# from utilities import mergeCenterList
 import pdb
 
 configfile = './parameters.ini'
@@ -18,8 +17,8 @@ if __name__ == '__main__':
     """input data"""
     # 191334-vv-1, 190645-vv-1
     # cap = cv2.VideoCapture('191334-vv-1.avi')
-    cap = cv2.VideoCapture('../opencv/192.168.1.145_01_20160721164209992.mp4')
-    # cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160706191100879.avi')
+    # cap = cv2.VideoCapture('../opencv/192.168.1.145_01_20160721164209992.mp4')
+    cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
     # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
     # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-20/4mm-2.65/192.168.0.100_01_20160720171945536.mp4')
     # cap = cv2.VideoCapture('/Users/yuanyi.xue/Downloads/2016-07-21/3m-4mm/192.168.1.145_01_20160721164209992.mp4')
@@ -50,6 +49,7 @@ if __name__ == '__main__':
     singlePersonBlobSize = parser.getint('PeopleCounting', 'singlePersonBlobSize')
     Debug = parser.getboolean('PeopleCounting', 'Debug')
     Visualize = parser.getboolean('PeopleCounting', 'Visualize') or Debug
+    useRatioCriteria = parser.getboolean('PeopleCounting', 'useRatioCriteria')
 
     """ Initialize MOG2, VideoWriter, and tracking """
     fgbg = cv2.BackgroundSubtractorMOG2(mog2History, mog2VarThrsh, mog2Shadow)
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     CODE_TYPE = cv2.cv.CV_FOURCC('m','p','4','v')
     video = cv2.VideoWriter('output_detection.avi',CODE_TYPE,30,(output_width,output_height*2),1)
 
-    trackingObj = Tracking(countingRegion, upperTrackingRegion, lowerTrackingRegion, peopleBlobSize)
+    trackingObj = Tracking(countingRegion, upperTrackingRegion, lowerTrackingRegion, peopleBlobSize, useRatioCriteria)
     tracks = []
     totalUp = 0
     totalDown = 0
@@ -106,7 +106,16 @@ if __name__ == '__main__':
 
             else: # single blob
                 l,u,w,h = cv2.boundingRect(cnt)
-                blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h))
+
+                peakVal = None
+                peakLoc = None
+                if useRatioCriteria:
+                    temp = np.zeros_like(fgmask)
+                    temp[u:u+h,l:l+w] =1
+                    blobmask = fgmask * temp
+                    (peakVal, peakLoc) = getBlobRatio(blobmask, countingRegion[2], countingRegion[3])
+
+                blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h, peakVal, peakLoc, frameInd))
 
             if Visualize:
                 cv2.circle(frame, (int(x), int(y)), int(radius), (0, 255, 255), 2)
