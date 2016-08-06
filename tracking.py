@@ -129,7 +129,7 @@ class Tracking(object):
         self.useRatioCriteria = useRatioCriteria
 
     """updateAllTracks"""
-    def updateTrack(self, blobs, tracks, distThreshold, inactiveThreshold):
+    def updateAllTrack(self, blobs, tracks, distThreshold, inactiveThreshold):
         # print tracks
         nBlob = len(blobs)
         nTrack = len(tracks)

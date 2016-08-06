@@ -5,6 +5,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans 
 
+
+def readBuffer(startOffset, cap):
+    for ii in range(startOffset):
+        ret, frame = cap.read()
+    return cap
+
+def getFrame(cap, frameInd):
+    ret, frame = cap.read()
+    if ret == False:
+        return None
+    # frame = imgLstBuf[np.mod(frameInd,bufSize)]
+    return frame
+
+
 def bigblobKmeans(frame, fgmask, n_clusters):
     colorlist = [np.array([0,255,255]),np.array([255,0,255]),np.array([255,255,0]),np.array([0,0,255]),np.array([255,0,0]),np.array([0,255,0])]
     

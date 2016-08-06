@@ -9,17 +9,45 @@ from ConfigParser import SafeConfigParser
 
 from utilities import bigblobKmeans, getBlobRatio
 from utilities import readBuffer, getFrame
+import Queue
+from bufferedVideoReader import BufVideoReader
+from threading import Thread
+
 import pdb
 
 configfile = './parameters.ini'
+
+def json_dump(totalDown, totalUp, timestamp):
+    """write data into json file"""
+    countingData = {
+        'direction' : 1, ##1 is downward, 2 upward
+        'totalDownCount' : totalDown,
+        'direction' : 2, 
+        'totalUpCount' : totalUp,
+        'timestamp' : timestamp,
+        }
+
+    with open('data.json', 'w') as f:
+         json.dump(countingData, f)
+
+def getFrmRSTP(BufFrameQ,TStampQ):
+    try:
+        if not BufFrameQ.empty():
+            frm = BufFrameQ.get()
+            ts = TStampQ.get()
+    except KeyboardInterrupt:
+        return None, None
+
+    return frm, ts
+
 
 if __name__ == '__main__':
     """input data"""
     # 191334-vv-1, 190645-vv-1
     # cap = cv2.VideoCapture('191334-vv-1.avi')
     # cap = cv2.VideoCapture('../opencv/192.168.1.145_01_20160721164209992.mp4')
-    cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
-    # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
+    # cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
+    cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
     # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-20/4mm-2.65/192.168.0.100_01_20160720171945536.mp4')
     # cap = cv2.VideoCapture('/Users/yuanyi.xue/Downloads/2016-07-21/3m-4mm/192.168.1.145_01_20160721164209992.mp4')
 
@@ -29,6 +57,19 @@ if __name__ == '__main__':
     # startOffset = 300
     # cap = readBuffer(startOffset, cap)
     ret, frame = cap.read()
+
+
+
+    """prepare for RSTP"""
+    # BufFrameQ = Queue.Queue()
+    # TStampQ = Queue.Queue()
+    """Spawn a daemon thread for fetching frames to a list"""
+    # worker = Thread(target=BufVideoReader, args=(url, BufFrameQ, TStampQ, RSTPframerate, ))
+    # worker.setDaemon(True)
+    # worker.start()
+    
+    # frame, ts = getFrmRSTP(BufFrameQ,TStampQ)
+
 
     """parameters from parameters.ini"""
     parser = SafeConfigParser()
@@ -69,12 +110,14 @@ if __name__ == '__main__':
     while(cap.isOpened()):
         start = time.clock()
         ret, frame = cap.read()
-        # frame = getFrame(cap,frameInd)
+        """rstp"""
+        # frame, ts = getFrmRSTP(cap,frameInd)
         if ret == False:
             break
 
         print 'Frame # %s' % frameInd
         frameInd += 1
+        # frameInd = ts
 
         # resize image, background subtraction and post-processing of blob
         frame = cv2.resize(frame, (output_width, output_height), interpolation = cv2.INTER_CUBIC)
@@ -94,38 +137,27 @@ if __name__ == '__main__':
                 continue
             ((x, y), radius) = cv2.minEnclosingCircle(cnt)
 
-            # contourAreaList.append(cv2.contourArea(cnt))
-            if radius > 1600: # SUPER large threshold to disable kmeans
-                print 'KMEANS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-                # n_clusters = np.int(cv2.contourArea(cnt)/13000)
-                n_clusters = np.int(cv2.contourArea(cnt)/singlePersonBlobSize)
-                centroidList = bigblobKmeans(frame, fgmask, n_clusters)
-                for nn in range(n_clusters):
-                    center = (int(centroidList[nn][0]), int(centroidList[nn][1]))
-                    blobs.append(Blob((int(center[0]), int(center[1])), l, l + w, u, u + h))
+            l,u,w,h = cv2.boundingRect(cnt)
+            peakVal = None
+            peakLoc = None
+            if useRatioCriteria:
+                temp = np.zeros_like(fgmask)
+                temp[u:u+h,l:l+w] =1
+                blobmask = fgmask * temp
+                (peakVal, peakLoc) = getBlobRatio(blobmask, countingRegion[2], countingRegion[3])
 
-            else: # single blob
-                l,u,w,h = cv2.boundingRect(cnt)
-
-                peakVal = None
-                peakLoc = None
-                if useRatioCriteria:
-                    temp = np.zeros_like(fgmask)
-                    temp[u:u+h,l:l+w] =1
-                    blobmask = fgmask * temp
-                    (peakVal, peakLoc) = getBlobRatio(blobmask, countingRegion[2], countingRegion[3])
-
-                blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h, peakVal, peakLoc, frameInd))
+            blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h, peakVal, peakLoc, frameInd))
 
             if Visualize:
                 cv2.circle(frame, (int(x), int(y)), int(radius), (0, 255, 255), 2)
                 # cv2.ellipse(frame,ellipse,(0,255,255),2)
                 cv2.circle(frame, (int(x), int(y)), 5, (0, 0, 255), -1)
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(frame, str(radius), center, font, 1, (0,255,255), 1)
+                cv2.putText(frame, str(center), center, font, 1, (0,255,255), 1)
+
 
         # tracking
-        tracks, nUp, nDown = trackingObj.updateTrack(blobs, tracks, distThreshold, inactiveThreshold)
+        tracks, nUp, nDown = trackingObj.updateAllTrack(blobs, tracks, distThreshold, inactiveThreshold)
         totalUp += nUp
         totalDown += nDown
         print '# UP %s' % totalUp
