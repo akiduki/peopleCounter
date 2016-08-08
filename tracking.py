@@ -2,8 +2,6 @@ import cv2
 import numpy as np
 import pdb
 
-
-
 colors = [(0,255,0), (255,0,0), (0,0,255), (0,255,255), (255,0,255), (255,255,0), (0,128,128), (128,0,128), (128,128,0)]
 
 class RectRegion(object):
@@ -18,7 +16,7 @@ class RectRegion(object):
 
 
 class Blob(object):
-    def __init__(self, center, minx, maxx, miny, maxy, peakVal, peakLoc, frameInd):
+    def __init__(self, center, minx, maxx, miny, maxy, peakVal, peakLoc, time):
         self.center = center
         self.minx = minx
         self.maxx = maxx
@@ -27,7 +25,7 @@ class Blob(object):
 
         self.peakVal = peakVal
         self.peakLoc = peakLoc
-        self.frameInd = frameInd
+        self.time = time # frameInd or timestamp from RSTP
 
 
 class Track(object):
@@ -59,8 +57,8 @@ class Track(object):
             self.peakVal.append(blob.peakVal)
             self.peakLoc.append(blob.peakLoc)
 
-        self.lifeStart = int(np.nanmin((self.lifeStart, blob.frameInd)))
-        self.lifeEnd = int(blob.frameInd)
+        self.lifeStart = np.nanmin((self.lifeStart, blob.time))
+        self.lifeEnd = blob.time
 
     def updateBlobSpan(self, blobspan):
         self.maxblobspan = max(self.maxblobspan, blobspan)
@@ -83,9 +81,9 @@ class Track(object):
         if ((np.array(self.centerList)[:,1][1:]-np.array(self.centerList)[:,1][:-1])>=0).sum()/float(len(self.centerList))>=0.70:
             peopleDirection = 1 ## downward
         elif ((np.array(self.centerList)[:,1][1:]-np.array(self.centerList)[:,1][:-1])<=0).sum()/float(len(self.centerList))>=0.70:
-            peopleDirection = 2 # upward
+            peopleDirection = -1 # upward
         elif np.mean(np.array(self.centerList)[:,1][-3:])< lowerH and np.mean(np.array(self.centerList)[:,1][:3])>upperH:
-            peopleDirection = 2 # upward
+            peopleDirection = -1 # upward
         elif np.mean(np.array(self.centerList)[:,1][:3])< lowerH and np.mean(np.array(self.centerList)[:,1][-3:])>upperH:
             peopleDirection = 1 # downward
         else:

@@ -1,33 +1,23 @@
 import numpy as np
 import cv2
 import time
+from datetime import datetime
 import math
 from tracking import Tracking
 from tracking import Blob
-
 from ConfigParser import SafeConfigParser
-
-from utilities import bigblobKmeans, getBlobRatio
-from utilities import readBuffer, getFrame
-import Queue
+from utilities import readBuffer, getFrame, getBlobRatio
 from bufferedVideoReader import BufVideoReader
 from threading import Thread
+import Queue
+import json
 
 import pdb
 
 configfile = './parameters.ini'
 
-def json_dump(totalDown, totalUp, timestamp):
-    """write data into json file"""
-    countingData = {
-        'direction' : 1, ##1 is downward, 2 upward
-        'totalDownCount' : totalDown,
-        'direction' : 2, 
-        'totalUpCount' : totalUp,
-        'timestamp' : timestamp,
-        }
-
-    with open('data.json', 'w') as f:
+def json_dump(countingData, ts):
+    with open('pplCt_'+str(ts)+'.json', 'w') as f:
          json.dump(countingData, f)
 
 def getFrmRSTP(BufFrameQ,TStampQ):
@@ -35,10 +25,15 @@ def getFrmRSTP(BufFrameQ,TStampQ):
         if not BufFrameQ.empty():
             frm = BufFrameQ.get()
             ts = TStampQ.get()
+            ts = ts2num(ts)
     except KeyboardInterrupt:
         return None, None
-
     return frm, ts
+
+def ts2num(ts):
+    """convert timestamp to number??"""
+    ts = datetime.fromtimestamp(ts).strftime('%m-%d_%H:%M:%S.%f')
+    return ts
 
 
 if __name__ == '__main__':
@@ -47,9 +42,11 @@ if __name__ == '__main__':
     # cap = cv2.VideoCapture('191334-vv-1.avi')
     # cap = cv2.VideoCapture('../opencv/192.168.1.145_01_20160721164209992.mp4')
     # cap = cv2.VideoCapture('../PeopleCounterLocal/01_20160721164209992.avi')
-    cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
+    # cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
     # cap = cv2.VideoCapture('/Users/Chenge/Downloads/2016-07-20/4mm-2.65/192.168.0.100_01_20160720171945536.mp4')
-    # cap = cv2.VideoCapture('/Users/yuanyi.xue/Downloads/2016-07-21/3m-4mm/192.168.1.145_01_20160721164209992.mp4')
+
+    # 3.5m
+    cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-08-04/3.5m/192.168.0.102_01_20160804172448765.mp4')
 
     startOffset = 300;
     cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, startOffset);
@@ -57,7 +54,6 @@ if __name__ == '__main__':
     # startOffset = 300
     # cap = readBuffer(startOffset, cap)
     ret, frame = cap.read()
-
 
 
     """prepare for RSTP"""
@@ -69,7 +65,8 @@ if __name__ == '__main__':
     # worker.start()
     
     # frame, ts = getFrmRSTP(BufFrameQ,TStampQ)
-
+    # pre_ts = ts ## initialize the timestamp
+    
 
     """parameters from parameters.ini"""
     parser = SafeConfigParser()
@@ -106,18 +103,17 @@ if __name__ == '__main__':
     totalUp = 0
     totalDown = 0
     frameInd = startOffset
+    countingData = []
 
     while(cap.isOpened()):
         start = time.clock()
         ret, frame = cap.read()
-        """rstp"""
-        # frame, ts = getFrmRSTP(cap,frameInd)
         if ret == False:
             break
-
         print 'Frame # %s' % frameInd
         frameInd += 1
-        # frameInd = ts
+        """rstp"""
+        # frame, ts = getFrmRSTP(cap,frameInd)
 
         # resize image, background subtraction and post-processing of blob
         frame = cv2.resize(frame, (output_width, output_height), interpolation = cv2.INTER_CUBIC)
@@ -147,6 +143,8 @@ if __name__ == '__main__':
                 (peakVal, peakLoc) = getBlobRatio(blobmask, countingRegion[2], countingRegion[3])
 
             blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h, peakVal, peakLoc, frameInd))
+            """use timestamp from RSTP"""
+            # blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h, peakVal, peakLoc, ts))
 
             if Visualize:
                 cv2.circle(frame, (int(x), int(y)), int(radius), (0, 255, 255), 2)
@@ -155,9 +153,26 @@ if __name__ == '__main__':
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cv2.putText(frame, str(center), center, font, 1, (0,255,255), 1)
 
-
         # tracking
         tracks, nUp, nDown = trackingObj.updateAllTrack(blobs, tracks, distThreshold, inactiveThreshold)
+        
+        """write data into json file"""
+        # 1 Start End
+        # -1 Start End 
+        if nUp!=0 or nDown!=0:
+            for track in tracks:
+                tempData = {
+                    'direction' : track.direction, 
+                    'LifeStart' : track.lifeStart,  
+                    'LifeEnd' : track.lifeEnd,             
+                    }
+                countingData.append(tempData)
+
+        """Json dump"""
+        # if ts-pre_ts >= 15*60: ## 15minutes
+        #     json_dump(countingData, ts)
+        #     pre_ts = ts
+
         totalUp += nUp
         totalDown += nDown
         print '# UP %s' % totalUp
@@ -171,8 +186,8 @@ if __name__ == '__main__':
                             (upperTrackingRegion[1], upperTrackingRegion[3]), (255, 0, 0), 2)
             cv2.rectangle(frame, (lowerTrackingRegion[0], lowerTrackingRegion[2]), 
                             (lowerTrackingRegion[1], lowerTrackingRegion[3]), (255, 0, 0), 2)
-            cv2.putText(frame, '# UP %s' % totalUp, (5, output_height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
-            cv2.putText(frame, '# DOWN %s' % totalDown, (5, output_height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 2)
+            cv2.putText(frame, '# UP %s' % totalUp, (5, output_height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+            cv2.putText(frame, '# DOWN %s' % totalDown, (5, output_height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
             for idxTrack, track in enumerate(tracks):
                 track.plot(frame)
                 # track.printTrack()
