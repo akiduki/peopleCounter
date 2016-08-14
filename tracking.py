@@ -94,7 +94,6 @@ class Track(object):
 
     def fitHorizontalRatio(self, validTrackUpperBound, countUpperBound, countLowerBound):
         ratioUp,ratioDown = 0,0
-        # horizRatioThresh = 0.4  #hallway
         horizRatioThresh = 0.2 #july 20
 
         print validTrackUpperBound, countUpperBound, countLowerBound

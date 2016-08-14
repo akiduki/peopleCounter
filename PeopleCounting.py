@@ -14,8 +14,10 @@ import json
 import pdb
 
 useVideo = True
-useRSTP = False
+useRTSP = False
 
+
+# from communication.client import post_msg
 
 class Parameters(object):
     def __init__(self):
@@ -36,19 +38,20 @@ class Parameters(object):
         self.upperTrackingRegion = map(int, parser.get('PeopleCounting', 'upperTrackingRegion').split(','))
         self.lowerTrackingRegion = map(int, parser.get('PeopleCounting', 'lowerTrackingRegion').split(','))
         self.inactiveThreshold = parser.getint('PeopleCounting', 'inactiveThreshold')
-        self.singlePersonBlobSize = parser.getint('PeopleCounting', 'singlePersonBlobSize')
+        # self.singlePersonBlobSize = parser.getint('PeopleCounting', 'singlePersonBlobSize')
         self.Debug = parser.getboolean('PeopleCounting', 'Debug')
         self.Visualize = parser.getboolean('PeopleCounting', 'Visualize') or Debug
         self.useRatioCriteria = parser.getboolean('PeopleCounting', 'useRatioCriteria')
-        self.RSTPurl = parser.get('PeopleCounting','RSTPurl')
-        self.RSTPframerate = parser.get('PeopleCounting','RSTPframerate')
+        self.RTSPurl = parser.get('PeopleCounting','RTSPurl')
+        self.RTSPframerate = parser.get('PeopleCounting','RTSPframerate')
 
 
 
 class bkgModel(object):
     def __init__(self,paramObj):
         """ Initialize MOG2, VideoWriter, and tracking """
-        self.fgbg = cv2.BackgroundSubtractorMOG2(paramObj.mog2History, paramObj.mog2VarThrsh, paramObj.mog2Shadow)
+        # self.fgbg = cv2.BackgroundSubtractorMOG2(paramObj.mog2History, paramObj.mog2VarThrsh, paramObj.mog2Shadow)
+        self.fgbg = cv2.BackgroundSubtractorMOG(paramObj.mog2History, paramObj.mog2VarThrsh, paramObj.mog2Shadow)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(paramObj.kernelSize,paramObj.kernelSize))
 
     def getFgmask(self,paramObj,frame):
@@ -69,7 +72,6 @@ class bkgModel(object):
             if cv2.contourArea(cnt) < paramObj.areaThreshold:
                 continue
             ((x, y), radius) = cv2.minEnclosingCircle(cnt)
-
             l,u,w,h = cv2.boundingRect(cnt)
             peakVal = None
             peakLoc = None
@@ -82,7 +84,6 @@ class bkgModel(object):
             self.blobs.append(Blob((int(x), int(y)), l, l + w, u, u + h, peakVal, peakLoc, countingObj.time))
             if paramObj.Visualize:
                 visObj.visualizeBlobs(frame, x, y, radius, center)
-
 
 
 class visualize(object):
@@ -126,19 +127,17 @@ class visualize(object):
         self.video.release()
         cv2.destroyAllWindows()
 
-
-
-class RSTPstream(object):
+class RTSPstream(object):
     def __init__(self,paramObj):
-        """prepare for RSTP"""
+        """prepare for RTSP"""
         self.BufFrameQ = Queue.Queue()
         self.TStampQ = Queue.Queue()
         """Spawn a daemon thread for fetching frames to a list"""
-        self.worker = Thread(target=BufVideoReader, args=(paramObj.RSTPurl, self.BufFrameQ, self.TStampQ, paramObj.RSTPframerate, ))
+        self.worker = Thread(target=BufVideoReader, args=(paramObj.RTSPurl, self.BufFrameQ, self.TStampQ, paramObj.RTSPframerate, ))
         self.worker.setDaemon(True)
         self.worker.start()
     
-    def getFrmRSTP(self):
+    def getFrmRTSP(self):
         if not self.BufFrameQ.empty():
             self.frame = self.BufFrameQ.get()
             self.ts = self.TStampQ.get()
@@ -160,20 +159,24 @@ class PeopleCounting(object):
         self.totalDown = 0
         if useVideo:
             # self.cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
-            # 3.5m
-            self.cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-08-04/3.5m/192.168.0.102_01_20160804172448765.mp4')
-            startOffset = 300;
+            # self.cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-08-04/3.5m/192.168.0.102_01_20160804172448765.mp4')
+            # self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/2.65/192.168.0.102_01_2016081212240476.mp4')
+            self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/2.65/192.168.0.102_01_2016081212262378.mp4')
+
+            # self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/3/192.168.0.102_01_20160812122942713.mp4')
+
+            startOffset = 0;
             self.cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, startOffset);
             # startOffset = 300
             # self.cap = readBuffer(startOffset, cap)
             self.frameInd = startOffset
             self.time = self.frameInd
 
-        elif useRSTP:
-            self.rstpObj = RSTPstream(paramObj)
-            self.rstpObj.getFrmRSTP()
-            self.pre_ts = self.rstpObj.ts ## initialize the timestamp
-            self.time = self.rstpObj.ts
+        elif useRTSP:
+            self.RTSPObj = RTSPstream(paramObj)
+            self.RTSPObj.getFrmRTSP()
+            self.pre_ts = self.RTSPObj.ts ## initialize the timestamp
+            self.time = self.RTSPObj.ts
 
     def getFrame(self):
         if useVideo:
@@ -181,13 +184,12 @@ class PeopleCounting(object):
             self.frameInd += 1
             self.time = self.frameInd  
 
-        elif useRSTP:
-            self.rstpObj.getFrmRSTP()
-            frame, ts = self.rstpObj.frame, self.rstpObj.ts
+        elif useRTSP:
+            self.RTSPObj.getFrmRTSP()
+            frame, ts = self.RTSPObj.frame, self.RTSPObj.ts
 
         print 'frameInd/timestamp # %s' % countingObj.time
         return frame
-
 
 
     def update(self,nUp,nDown):
@@ -216,6 +218,15 @@ class PeopleCounting(object):
 
 
 
+    def json_upload(self):
+        pass
+    #     try:
+    #         post_msg(upload_id,self.countingData)
+    #     except:
+    #         print "Possibly socket connection error, sleep and retry..."
+    #         time.sleep(5)
+
+
 if __name__ == '__main__':
     paramObj = Parameters()
     countingObj = PeopleCounting(paramObj)
@@ -228,10 +239,9 @@ if __name__ == '__main__':
     if paramObj.Visualize:
         visObj = visualize(paramObj,output_width,output_height)
 
-
     if useVideo:
         criteria = countingObj.cap.isOpened()
-    elif useRSTP:
+    elif useRTSP:
         criteria = True
     while(criteria):
         start = time.clock()
@@ -254,9 +264,9 @@ if __name__ == '__main__':
             visObj.visualizeCounting(paramObj, countingObj,bkModelObj,frame,nUp,nDown,output_height)
 
         """Json dump"""
-        # if countingObj.rstpObj.ts-countingObj.pre_ts >= 15*60: ## 15minutes=??
+        # if countingObj.RTSPObj.ts-countingObj.pre_ts >= 15*60: ## 15minutes=??
         #     countingObj.json_dump()
-        #     countingObj.pre_ts = countingObj.rstpObj.ts
+        #     countingObj.pre_ts = countingObj.RTSPObj.ts
 
 
     if paramObj.visualize or paramObj.Debug:
