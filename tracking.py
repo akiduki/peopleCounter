@@ -57,7 +57,7 @@ class Track(object):
             self.peakVal.append(blob.peakVal)
             self.peakLoc.append(blob.peakLoc)
 
-        self.lifeStart = np.nanmin((self.lifeStart, blob.time))
+        self.lifeStart = int(np.nanmin((self.lifeStart, blob.time)))
         self.lifeEnd = blob.time
 
     def updateBlobSpan(self, blobspan):

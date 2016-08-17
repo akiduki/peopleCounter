@@ -40,12 +40,16 @@ class Parameters(object):
         self.inactiveThreshold = parser.getint('PeopleCounting', 'inactiveThreshold')
         # self.singlePersonBlobSize = parser.getint('PeopleCounting', 'singlePersonBlobSize')
         self.Debug = parser.getboolean('PeopleCounting', 'Debug')
-        self.Visualize = parser.getboolean('PeopleCounting', 'Visualize') or Debug
+        self.Visualize = parser.getboolean('PeopleCounting', 'Visualize') or self.Debug
         self.useRatioCriteria = parser.getboolean('PeopleCounting', 'useRatioCriteria')
         self.RTSPurl = parser.get('PeopleCounting','RTSPurl')
-        self.RTSPframerate = parser.get('PeopleCounting','RTSPframerate')
+        self.RTSPframerate = parser.getint('PeopleCounting','RTSPframerate')
 
-
+        """ASSUMPTION: ppl entering door walk downards(direction = 1) in the video"""
+        self.store_id = parser.getint('store', 'store_id')
+        self.camera_id = parser.getint('store', 'camera_id')
+        self.ipc_username = parser.get('store', 'ipc_username')
+        self.ipc_password = parser.get('store', 'ipc_password') 
 
 class bkgModel(object):
     def __init__(self,paramObj):
@@ -148,41 +152,45 @@ class RTSPstream(object):
             self.ts = 1000
 
     def ts2num(self):
-        """convert timestamp to number??"""
-        self.ts = datetime.fromtimestamp(self.ts).strftime('%m-%d_%H:%M:%S.%f')
+        """convert timestamp to number s.t. to compare in tracking class"""
+        pass 
         
 class PeopleCounting(object):
     def __init__(self,paramObj):
         self.countingData = []
+        self.countingData.append({'IsTopView': True})
         self.tracks = []
         self.totalUp = 0
         self.totalDown = 0
         if useVideo:
-            # self.cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
+            self.cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-07-21/3-4mm/192.168.1.145_01_20160721164209992.mp4')
             # self.cap = cv2.VideoCapture('/Users/Chenge/Desktop/stereo_vision/peopleCounter/data/2016-08-04/3.5m/192.168.0.102_01_20160804172448765.mp4')
             # self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/2.65/192.168.0.102_01_2016081212240476.mp4')
-            self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/2.65/192.168.0.102_01_2016081212262378.mp4')
+            # self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/2.65/192.168.0.102_01_2016081212262378.mp4')
 
             # self.cap = cv2.VideoCapture('/Users/Chenge/Downloads/indoor/3/192.168.0.102_01_20160812122942713.mp4')
 
-            startOffset = 0;
+            startOffset = 100;
             self.cap.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, startOffset);
             # startOffset = 300
             # self.cap = readBuffer(startOffset, cap)
             self.frameInd = startOffset
-            self.time = self.frameInd
+            # self.time = self.frameInd
+            self.time = time.time()
 
         elif useRTSP:
             self.RTSPObj = RTSPstream(paramObj)
             self.RTSPObj.getFrmRTSP()
             self.pre_ts = self.RTSPObj.ts ## initialize the timestamp
             self.time = self.RTSPObj.ts
+            
 
     def getFrame(self):
         if useVideo:
             ret, frame = self.cap.read()
             self.frameInd += 1
-            self.time = self.frameInd  
+            # self.time = self.frameInd  
+            self.time = time.time()
 
         elif useRTSP:
             self.RTSPObj.getFrmRTSP()
@@ -201,21 +209,22 @@ class PeopleCounting(object):
 
     def json_update(self,nUp,nDown):
         """write data into json file"""
-        # 1 Start End
-        # -1 Start End 
+        # 1 Start End (downward)
+        # -1 Start End (upward)
         if nUp!=0 or nDown!=0:
             for track in self.tracks:
                 tempData = {
                     'direction' : track.direction, 
+                    # 'LifeStart' : datetime.fromtimestamp(track.lifeStart).strftime('%Y-%m-%d_%H:%M:%S.%f'),  
+                    # 'LifeEnd' : datetime.fromtimestamp(track.lifeEnd).strftime('%Y-%m-%d_%H:%M:%S.%f'),    
                     'LifeStart' : track.lifeStart,  
-                    'LifeEnd' : track.lifeEnd,             
+                    'LifeEnd' : track.lifeEnd,  
                     }
                 self.countingData.append(tempData)
 
     def json_dump(self):
-        with open('pplCt_'+str(self.ts)+'.json', 'w') as f:
+        with open('pplCt_'+str(self.time)+'.json', 'wb') as f:
             json.dump(self.countingData, f)
-
 
 
     def json_upload(self):
