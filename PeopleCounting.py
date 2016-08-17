@@ -142,10 +142,14 @@ class RTSPstream(object):
         self.worker.start()
     
     def getFrmRTSP(self):
+	print self.TStampQ.get()
+	print 'self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
         if not self.BufFrameQ.empty():
             self.frame = self.BufFrameQ.get()
             self.ts = self.TStampQ.get()
-            self.ts2num()
+            cv2.imwrite('../'+str(self.ts)+'.jpg',self.frame)
+            print "RTSP TS:", self.ts
+            #self.ts2num()
         else:
             print "queue is empty!!"
             self.frame = None
@@ -183,7 +187,6 @@ class PeopleCounting(object):
             self.RTSPObj.getFrmRTSP()
             self.pre_ts = self.RTSPObj.ts ## initialize the timestamp
             self.time = self.RTSPObj.ts
-            
 
     def getFrame(self):
         if useVideo:
