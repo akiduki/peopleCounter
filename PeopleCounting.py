@@ -13,8 +13,8 @@ import Queue
 import json
 import pdb
 
-useVideo = True
-useRTSP = False
+useVideo = False
+useRTSP = True
 
 
 # from communication.client import post_msg
@@ -137,27 +137,38 @@ class RTSPstream(object):
         self.BufFrameQ = Queue.Queue()
         self.TStampQ = Queue.Queue()
         """Spawn a daemon thread for fetching frames to a list"""
-        self.worker = Thread(target=BufVideoReader, args=(paramObj.RTSPurl, self.BufFrameQ, self.TStampQ, paramObj.RTSPframerate, ))
-        self.worker.setDaemon(True)
-        self.worker.start()
-    
+        worker = Thread(target=BufVideoReader, args=(paramObj.RTSPurl,  self.BufFrameQ, self.TStampQ, paramObj.RTSPframerate, ))
+        worker.setDaemon(True)
+        worker.start()
+        self.frame = None
+        self.waitForFrm()
+        print 'initialization222: self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
+
+
+    def waitForFrm(self):
+        while self.BufFrameQ.empty():
+            print "waiting..."
+            print 'initialization: self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
+            time.sleep(1./paramObj.RTSPframerate)
+
     def getFrmRTSP(self):
-	print self.TStampQ.get()
-	print 'self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
+        if self.BufFrameQ.empty():
+            self.waitForFrm()
+            print 'self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
+            
         if not self.BufFrameQ.empty():
             self.frame = self.BufFrameQ.get()
             self.ts = self.TStampQ.get()
-            cv2.imwrite('../'+str(self.ts)+'.jpg',self.frame)
-            print "RTSP TS:", self.ts
-            #self.ts2num()
-        else:
-            print "queue is empty!!"
-            self.frame = None
-            self.ts = 1000
+            # ret = cv2.imwrite('../'+str(self.ts)+'.jpg',self.frame)
+            # print "ret", ret
+            print "RTSP TS:",  datetime.fromtimestamp(self.ts).strftime('%m-%d_%H:%M:%S.%f')
+            # else:
+            #     print "queue is empty!!"
+            #     self.frame = None
+            #     self.ts = None
+            #     """wait....for RTSP"""
+            #     self.waitForFrm()
 
-    def ts2num(self):
-        """convert timestamp to number s.t. to compare in tracking class"""
-        pass 
         
 class PeopleCounting(object):
     def __init__(self,paramObj):
@@ -197,9 +208,11 @@ class PeopleCounting(object):
 
         elif useRTSP:
             self.RTSPObj.getFrmRTSP()
-            frame, ts = self.RTSPObj.frame, self.RTSPObj.ts
+            frame = self.RTSPObj.frame
+            self.time = self.RTSPObj.ts
 
-        print 'frameInd/timestamp # %s' % countingObj.time
+
+        print 'frameInd/timestamp # %s' % self.RTSPObj.ts
         return frame
 
 
