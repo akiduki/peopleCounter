@@ -11,18 +11,19 @@ from bufferedVideoReader import BufVideoReader
 from threading import Thread
 import Queue
 import json
+import requests
 import pdb
 
-useVideo = False
+useVideo = False 
 useRTSP = True
 
-
+configfile = '/opt/wikkit/configuration/tk1_config.ini'
+uploadURL = "http://120.76.26.101:8000/tk1/return_customer/h_count" 
 # from communication.client import post_msg
 
 class Parameters(object):
     def __init__(self):
         """parameters from parameters.ini"""
-        configfile = './parameters.ini'
         parser = SafeConfigParser()
         parser.read(configfile)
         self.mog2History = parser.getint('PeopleCounting', 'mog2History')
@@ -50,6 +51,7 @@ class Parameters(object):
         self.camera_id = parser.getint('store', 'camera_id')
         self.ipc_username = parser.get('store', 'ipc_username')
         self.ipc_password = parser.get('store', 'ipc_password') 
+        self.wl_dev_cam_id = parser.get('store', 'wl_dev_cam_id')
 
 class bkgModel(object):
     def __init__(self,paramObj):
@@ -144,36 +146,21 @@ class RTSPstream(object):
         self.waitForFrm()
         print 'initialization222: self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
 
-
-    def waitForFrm(self):
-        while self.BufFrameQ.empty():
-            print "waiting..."
-            print 'initialization: self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
-            time.sleep(1./paramObj.RTSPframerate)
-
     def getFrmRTSP(self):
-        if self.BufFrameQ.empty():
-            self.waitForFrm()
-            print 'self.BufFrameQ.empty() = ', self.BufFrameQ.empty()
+        # loop until get a frame
+        while True:
+            if not self.BufFrameQ.empty():
+                self.frame = self.BufFrameQ.get()
+                self.ts = self.TStampQ.get()
+                break
             
-        if not self.BufFrameQ.empty():
-            self.frame = self.BufFrameQ.get()
-            self.ts = self.TStampQ.get()
-            # ret = cv2.imwrite('../'+str(self.ts)+'.jpg',self.frame)
-            # print "ret", ret
-            print "RTSP TS:",  datetime.fromtimestamp(self.ts).strftime('%m-%d_%H:%M:%S.%f')
-            # else:
-            #     print "queue is empty!!"
-            #     self.frame = None
-            #     self.ts = None
-            #     """wait....for RTSP"""
-            #     self.waitForFrm()
+            else:
+                print "Queue is empty, wait %.3f seconds" %(1./paramObj.RTSPframerate)
+                time.sleep(1./paramObj.RTSPframerate)
 
-        
 class PeopleCounting(object):
     def __init__(self,paramObj):
         self.countingData = []
-        self.countingData.append({'IsTopView': True})
         self.tracks = []
         self.totalUp = 0
         self.totalDown = 0
@@ -238,22 +225,21 @@ class PeopleCounting(object):
                     }
                 self.countingData.append(tempData)
 
-    def json_dump(self):
-        with open('pplCt_'+str(self.time)+'.json', 'wb') as f:
-            json.dump(self.countingData, f)
+    def json_upload(self, url, headers):
+        data = json.dumps(self.countingData)
+        try:
+            requests.post(url, data=data, headers=headers)
+            # clean up the countingData after successful upload
+            self.countingData = []
 
-
-    def json_upload(self):
-        pass
-    #     try:
-    #         post_msg(upload_id,self.countingData)
-    #     except:
-    #         print "Possibly socket connection error, sleep and retry..."
-    #         time.sleep(5)
+        except Exception, e:
+            print "error posting countingData" + str(e)
+    
 
 
 if __name__ == '__main__':
     paramObj = Parameters()
+    uploadURLfull = uploadURL + '/' + str(paramObj.wl_dev_cam_id)
     countingObj = PeopleCounting(paramObj)
     trackingObj = Tracking(paramObj.countingRegion, paramObj.upperTrackingRegion, paramObj.lowerTrackingRegion, paramObj.peopleBlobSize, paramObj.useRatioCriteria)
     bkModelObj = bkgModel(paramObj)
@@ -289,10 +275,10 @@ if __name__ == '__main__':
             visObj.visualizeCounting(paramObj, countingObj,bkModelObj,frame,nUp,nDown,output_height)
 
         """Json dump"""
-        # if countingObj.RTSPObj.ts-countingObj.pre_ts >= 15*60: ## 15minutes=??
-        #     countingObj.json_dump()
-        #     countingObj.pre_ts = countingObj.RTSPObj.ts
-
+        # send json to server at 00/15/30/45 minutes of the hour
+        now = datetime.now()
+        if now.minute in [0, 15, 30, 45]:
+            countingObj.json_upload(uploadURLfull, headers)
 
     if paramObj.visualize or paramObj.Debug:
         visObj.release()
